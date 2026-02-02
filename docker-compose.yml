@@ -1,0 +1,91 @@
+version: '3.8'
+
+# IT Helpdesk Agent - Local Development Stack
+# Usage: docker-compose up -d
+
+services:
+  # =============================================================================
+  # API Server
+  # =============================================================================
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - API_PORT=3001
+    env_file:
+      - .env
+    depends_on:
+      - supabase-db
+    volumes:
+      - ./apps/api/src:/app/apps/api/src:ro
+    networks:
+      - helpdesk-network
+
+  # =============================================================================
+  # Web Frontend
+  # =============================================================================
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+    env_file:
+      - .env
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web/src:/app/apps/web/src:ro
+    networks:
+      - helpdesk-network
+
+  # =============================================================================
+  # Supabase Database (PostgreSQL)
+  # For local development only - use managed Supabase in production
+  # =============================================================================
+  supabase-db:
+    image: supabase/postgres:15.1.0.147
+    ports:
+      - "54322:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - supabase-db-data:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - helpdesk-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # Supabase Studio (Optional - for DB management)
+  # =============================================================================
+  supabase-studio:
+    image: supabase/studio:20240101-ce42139
+    ports:
+      - "54323:3000"
+    environment:
+      STUDIO_PG_META_URL: http://supabase-meta:8080
+      SUPABASE_URL: http://supabase-kong:8000
+      SUPABASE_REST_URL: http://supabase-kong:8000/rest/v1/
+    depends_on:
+      - supabase-db
+    networks:
+      - helpdesk-network
+
+networks:
+  helpdesk-network:
+    driver: bridge
+
+volumes:
+  supabase-db-data:

@@ -30,9 +30,9 @@ async function apiRequest<T>(
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options.headers || {}),
+    ...(options.headers as Record<string, string> || {}),
   };
 
   if (accessToken) {
@@ -242,6 +242,12 @@ export const agentAPI = {
       response: AgentResponse;
       conversationId: string;
       ticketUpdated: boolean;
+      /** The saved agent message - use for immediate display to avoid read-after-write issues */
+      agentMessage: {
+        id: string;
+        content: string;
+        createdAt: string;
+      };
     }>('/api/agent/chat', {
       method: 'POST',
       body: JSON.stringify({ ticketId, message }),
@@ -339,5 +345,111 @@ export const privilegedAPI = {
         accountEnable: boolean;
       };
     }>('/api/privileged/status', {}, accessToken);
+  },
+};
+
+// =============================================================================
+// HR API (HR staff & IT Admin)
+// =============================================================================
+
+export interface EmployeeRecord {
+  id: string;
+  firstName: string;
+  lastName: string;
+  personalEmail: string;
+  jobTitle: string | null;
+  department: string | null;
+  userPrincipalName: string;
+  displayName: string;
+  azureObjectId: string | null;
+  licenseAssigned: string | null;
+  credentialsEmailed: boolean;
+  credentialsEmailedAt: string | null;
+  status: string;
+  errorMessage: string | null;
+  offboardedAt: string | null;
+  offboardReason: string | null;
+  lastModifiedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HRDashboardStats {
+  totalEmployees: number;
+  activeEmployees: number;
+  pendingOnboarding: number;
+  offboardedEmployees: number;
+  failedOnboarding: number;
+  recentOnboardings: EmployeeRecord[];
+}
+
+export const hrAPI = {
+  /** Get HR dashboard stats */
+  getDashboardStats: async (accessToken: string) => {
+    return apiRequest<{
+      success: boolean;
+      data: HRDashboardStats;
+    }>('/api/hr/dashboard/stats', {}, accessToken);
+  },
+
+  /** List employees with optional filters */
+  getEmployees: async (
+    accessToken: string,
+    params?: { status?: string; search?: string }
+  ) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.search) query.set('search', params.search);
+
+    const queryString = query.toString();
+    return apiRequest<{
+      success: boolean;
+      data: EmployeeRecord[];
+    }>(`/api/hr/employees${queryString ? `?${queryString}` : ''}`, {}, accessToken);
+  },
+
+  /** Get single employee details */
+  getEmployee: async (accessToken: string, id: string) => {
+    return apiRequest<{
+      success: boolean;
+      data: EmployeeRecord;
+    }>(`/api/hr/employees/${id}`, {}, accessToken);
+  },
+
+  /** Modify employee (department, job title) */
+  modifyEmployee: async (
+    accessToken: string,
+    id: string,
+    changes: { jobTitle?: string; department?: string }
+  ) => {
+    return apiRequest<{ success: boolean; message: string }>(
+      `/api/hr/employees/${id}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(changes),
+      },
+      accessToken
+    );
+  },
+
+  /** Offboard employee */
+  offboardEmployee: async (accessToken: string, id: string, reason: string) => {
+    return apiRequest<{ success: boolean; message: string }>(
+      `/api/hr/employees/${id}/offboard`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      },
+      accessToken
+    );
+  },
+
+  /** Resend credentials to personal email */
+  resendCredentials: async (accessToken: string, id: string) => {
+    return apiRequest<{ success: boolean; message: string }>(
+      `/api/hr/employees/${id}/resend-credentials`,
+      { method: 'POST' },
+      accessToken
+    );
   },
 };

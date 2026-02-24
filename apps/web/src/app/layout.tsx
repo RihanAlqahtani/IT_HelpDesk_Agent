@@ -1,12 +1,23 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Poppins } from 'next/font/google';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+});
+
+const poppins = Poppins({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-poppins',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
-  title: 'IT Helpdesk Agent',
-  description: 'AI-powered IT support assistance',
+  title: 'IT Helpdesk Agent | 3Lines',
+  description: 'AI-powered IT support assistance by 3Lines',
 };
 
 export default function RootLayout({
@@ -15,11 +26,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
-        <div className="min-h-screen bg-gray-50">
-          {children}
-        </div>
+    <html lang="en" className={`${inter.variable} ${poppins.variable}`}>
+      <body className={`${inter.className} min-h-screen bg-white text-body-dark antialiased`}>
+        {children}
       </body>
     </html>
   );

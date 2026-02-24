@@ -98,16 +98,22 @@ export default function AdminTicketDetailPage() {
     if (!session?.accessToken) return;
 
     try {
-      const [detailsResult, historyResult] = await Promise.all([
-        ticketsAPI.getDetails(session.accessToken, ticketId),
-        agentAPI.getHistory(session.accessToken, ticketId).catch(() => ({ messages: [] })),
-      ]);
-
+      // Load ticket details first - this is required
+      const detailsResult = await ticketsAPI.getDetails(session.accessToken, ticketId);
       setTicket(detailsResult.ticket);
       setTicketUser(detailsResult.user);
-      setMessages(historyResult.messages);
+
+      // Load conversation history separately - don't let it block ticket display
+      try {
+        const historyResult = await agentAPI.getHistory(session.accessToken, ticketId);
+        setMessages(historyResult.messages);
+      } catch (historyErr) {
+        console.error('Failed to load conversation history:', historyErr);
+        setMessages([]);
+      }
     } catch (err) {
-      setError('Failed to load ticket details');
+      console.error('Failed to load ticket details:', err);
+      setError('Failed to load ticket details. Please try refreshing the page.');
     } finally {
       setLoading(false);
     }

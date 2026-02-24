@@ -33,19 +33,98 @@ export default function TicketDetailPage() {
     scrollToBottom();
   }, [messages]);
 
+  // Track if we should poll for updates (when awaiting approval or just changed from it)
+  const [shouldPoll, setShouldPoll] = useState(false);
+  const prevStatusRef = useRef<string | null>(null);
+
+  // Determine if we should be polling
+  useEffect(() => {
+    if (!ticket) return;
+
+    // Start polling when ticket enters awaiting_approval
+    if (ticket.status === 'awaiting_approval') {
+      setShouldPoll(true);
+    }
+
+    // Keep polling briefly after status changes from awaiting_approval
+    // This ensures we fetch the temp password message that arrives after approval
+    if (prevStatusRef.current === 'awaiting_approval' && ticket.status !== 'awaiting_approval') {
+      // Do one final fetch to get any messages that arrived with the status change
+      const fetchFinalMessages = async () => {
+        if (!session?.accessToken) return;
+        try {
+          const historyData = await agentAPI.getHistory(session.accessToken, ticketId);
+          if (historyData.messages.length > messages.length) {
+            setMessages(historyData.messages);
+          }
+        } catch (err) {
+          console.error('Final fetch error:', err);
+        }
+        // Stop polling after this fetch
+        setShouldPoll(false);
+      };
+      fetchFinalMessages();
+    }
+
+    prevStatusRef.current = ticket.status;
+  }, [ticket?.status, session?.accessToken, ticketId, messages.length]);
+
+  // Poll for updates when ticket is awaiting approval
+  useEffect(() => {
+    if (!session?.accessToken || !ticket || !shouldPoll) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const [ticketData, historyData] = await Promise.all([
+          ticketsAPI.get(session.accessToken, ticketId),
+          agentAPI.getHistory(session.accessToken, ticketId),
+        ]);
+
+        // Update ticket if status changed
+        if (ticketData.status !== ticket.status) {
+          setTicket(ticketData);
+        }
+
+        // Update messages if new ones arrived
+        if (historyData.messages.length > messages.length) {
+          setMessages(historyData.messages);
+
+          // Check if we got a system message with password - stop polling
+          const hasPasswordMessage = historyData.messages.some(
+            (m: ConversationMessage) => m.role === 'system' && m.content.includes('temporary password')
+          );
+          if (hasPasswordMessage) {
+            setShouldPoll(false);
+          }
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+      }
+    }, 3000); // Poll every 3 seconds for faster response
+
+    return () => clearInterval(pollInterval);
+  }, [session?.accessToken, ticket?.status, ticketId, messages.length, shouldPoll]);
+
   const loadTicketData = async () => {
     if (!session?.accessToken) return;
 
     try {
-      const [ticketData, historyData] = await Promise.all([
-        ticketsAPI.get(session.accessToken, ticketId),
-        agentAPI.getHistory(session.accessToken, ticketId),
-      ]);
-
+      // Load ticket first - this is required
+      const ticketData = await ticketsAPI.get(session.accessToken, ticketId);
       setTicket(ticketData);
-      setMessages(historyData.messages);
+
+      // Load conversation history separately - don't let it block ticket display
+      try {
+        const historyData = await agentAPI.getHistory(session.accessToken, ticketId);
+        setMessages(historyData.messages);
+      } catch (historyErr) {
+        console.error('Failed to load conversation history:', historyErr);
+        // Don't set error - ticket still displays, just no history
+        setMessages([]);
+      }
     } catch (err) {
-      setError('Failed to load ticket');
+      console.error('Failed to load ticket:', err);
+      setError('Failed to load ticket. Please try refreshing the page.');
     } finally {
       setLoading(false);
     }
@@ -79,28 +158,34 @@ export default function TicketDetailPage() {
     try {
       const result = await agentAPI.chat(session.accessToken, ticketId, messageContent);
 
-      // Replace temp message and add agent response
+      // Use the saved agent message directly from the API response
+      // This avoids read-after-write consistency issues with database fetches
+      const agentMessage: ConversationMessage = {
+        id: result.agentMessage.id,
+        ticketId,
+        role: 'agent',
+        content: result.agentMessage.content,
+        createdAt: result.agentMessage.createdAt,
+      };
+
+      // Replace temp user message with permanent ID and add agent response
       setMessages((prev) => {
-        const filtered = prev.filter((m) => m.id !== 'temp-user');
-        return [
-          ...filtered,
-          { ...tempUserMessage, id: `user-${Date.now()}` },
-          {
-            id: result.conversationId,
-            ticketId,
-            role: 'agent',
-            content: buildAgentContent(result.response),
-            agentResponse: result.response,
-            createdAt: new Date().toISOString(),
-          },
-        ];
+        // Find the temp user message and keep all messages before it
+        const withoutTemp = prev.filter((m) => m.id !== 'temp-user');
+        // Add the user message with a proper ID (use conversationId as base)
+        const userMessage: ConversationMessage = {
+          id: `user-${result.conversationId}`,
+          ticketId,
+          role: 'user',
+          content: messageContent,
+          createdAt: new Date().toISOString(),
+        };
+        return [...withoutTemp, userMessage, agentMessage];
       });
 
-      // Refresh ticket if updated
-      if (result.ticketUpdated) {
-        const updatedTicket = await ticketsAPI.get(session.accessToken, ticketId);
-        setTicket(updatedTicket);
-      }
+      // Fetch updated ticket status (for status changes like awaiting_approval)
+      const updatedTicket = await ticketsAPI.get(session.accessToken, ticketId);
+      setTicket(updatedTicket);
     } catch (err) {
       setError('Failed to send message. Please try again.');
       // Remove optimistic message
@@ -142,38 +227,53 @@ export default function TicketDetailPage() {
       parts.push("It looks like your issue has been resolved. I'm marking this ticket as resolved. If you need further assistance, feel free to create a new ticket.");
     }
 
+    // Handle password reset / privileged action approval requests
+    if (response.decision === 'request_approval') {
+      if (parts.length > 0) parts.push('');
+      parts.push("✅ **Password Reset Request Submitted**");
+      parts.push('');
+      parts.push("I've submitted a password reset request on your behalf. An IT Administrator will review and approve it shortly.");
+      parts.push('');
+      parts.push("**What happens next:**");
+      parts.push("1. An IT Admin will receive your request");
+      parts.push("2. Once approved, your password will be reset automatically");
+      parts.push("3. You'll receive your temporary password right here in this chat");
+      parts.push('');
+      parts.push("⏳ Please keep this chat open or check back soon for your new password.");
+    }
+
     return parts.join('\n') || 'How can I help you further with this issue?';
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'open':
-        return 'bg-blue-100 text-blue-800 ring-blue-600/20';
+        return 'bg-info/10 text-info-dark ring-info/20';
       case 'in_progress':
-        return 'bg-amber-100 text-amber-800 ring-amber-600/20';
+        return 'bg-warning/10 text-warning-dark ring-warning/20';
       case 'awaiting_approval':
-        return 'bg-purple-100 text-purple-800 ring-purple-600/20';
+        return 'bg-purple/10 text-purple-dark ring-purple/20';
       case 'escalated':
-        return 'bg-red-100 text-red-800 ring-red-600/20';
+        return 'bg-danger/10 text-danger-dark ring-danger/20';
       case 'resolved':
-        return 'bg-green-100 text-green-800 ring-green-600/20';
+        return 'bg-success/10 text-success-dark ring-success/20';
       case 'closed':
-        return 'bg-gray-100 text-gray-800 ring-gray-600/20';
+        return 'bg-surface-light text-body-dark ring-border-light';
       default:
-        return 'bg-gray-100 text-gray-800 ring-gray-600/20';
+        return 'bg-surface-light text-body-dark ring-border-light';
     }
   };
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
       case 'high':
-        return 'text-red-600 bg-red-50';
+        return 'text-danger bg-danger/10';
       case 'medium':
-        return 'text-amber-600 bg-amber-50';
+        return 'text-warning-dark bg-warning/10';
       case 'low':
-        return 'text-green-600 bg-green-50';
+        return 'text-success bg-success/10';
       default:
-        return 'text-gray-600 bg-gray-50';
+        return 'text-body-dark bg-surface-light';
     }
   };
 
@@ -215,7 +315,7 @@ export default function TicketDetailPage() {
         <div className="flex h-[calc(100vh-200px)] items-center justify-center">
           <div className="text-center">
             <div className="spinner mx-auto mb-4 h-8 w-8"></div>
-            <p className="text-sm text-gray-500">Loading ticket...</p>
+            <p className="text-sm text-text-muted">Loading ticket...</p>
           </div>
         </div>
       </DashboardLayout>
@@ -228,7 +328,7 @@ export default function TicketDetailPage() {
         <div className="flex h-[calc(100vh-200px)] items-center justify-center">
           <div className="text-center">
             <svg
-              className="mx-auto h-12 w-12 text-gray-400"
+              className="mx-auto h-12 w-12 text-text-gray"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -240,10 +340,22 @@ export default function TicketDetailPage() {
                 d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            <p className="mt-4 text-gray-500">Ticket not found</p>
-            <Link href="/dashboard" className="mt-4 inline-block text-primary-600 hover:text-primary-700">
-              Back to Dashboard
-            </Link>
+            <p className="mt-4 text-text-muted">{error || 'Ticket not found'}</p>
+            <div className="mt-4 flex items-center justify-center space-x-4">
+              <button
+                onClick={() => {
+                  setLoading(true);
+                  setError('');
+                  loadTicketData();
+                }}
+                className="text-primary-light hover:text-primary transition-colors"
+              >
+                Try again
+              </button>
+              <Link href="/dashboard" className="text-text-muted hover:text-body-dark transition-colors">
+                Back to Dashboard
+              </Link>
+            </div>
           </div>
         </div>
       </DashboardLayout>
@@ -254,11 +366,11 @@ export default function TicketDetailPage() {
     <DashboardLayout>
       <div className="flex h-[calc(100vh-130px)] flex-col">
         {/* Ticket header */}
-        <div className="flex items-start justify-between border-b border-gray-200 pb-4">
+        <div className="flex items-start justify-between border-b border-border-light pb-4">
           <div className="flex items-start space-x-4">
             <Link
               href="/dashboard"
-              className="mt-1 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              className="mt-1 rounded-lg p-1.5 text-text-gray hover:bg-surface-light hover:text-body-dark transition-colors"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -266,7 +378,7 @@ export default function TicketDetailPage() {
             </Link>
             <div>
               <div className="flex items-center space-x-3">
-                <h1 className="text-xl font-bold text-gray-900">Ticket #{ticket.ticketNumber}</h1>
+                <h1 className="text-xl font-heading font-bold text-primary-dark">Ticket #{ticket.ticketNumber}</h1>
                 <span
                   className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${getStatusColor(
                     ticket.status
@@ -282,23 +394,23 @@ export default function TicketDetailPage() {
                   {ticket.severity} severity
                 </span>
               </div>
-              <p className="mt-1 text-gray-600">{ticket.subject}</p>
-              <p className="mt-1 text-sm text-gray-400 flex items-center space-x-2">
+              <p className="mt-1 text-body-dark">{ticket.subject}</p>
+              <p className="mt-1 text-sm text-text-gray flex items-center space-x-2">
                 <span>{formatCategory(ticket.category)}</span>
                 <span>&bull;</span>
                 <span>Created {new Date(ticket.createdAt).toLocaleDateString()}</span>
                 <span>&bull;</span>
                 <span className="flex items-center">
                   {isTicketClosed ? (
-                    <svg className="h-3.5 w-3.5 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="h-3.5 w-3.5 text-success mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   ) : (
-                    <svg className="h-3.5 w-3.5 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="h-3.5 w-3.5 text-text-gray mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   )}
-                  <span className={isTicketClosed ? 'text-green-600' : ''}>
+                  <span className={isTicketClosed ? 'text-success' : ''}>
                     {isTicketClosed ? 'Resolved in ' : 'Open for '}{formatDuration(ticket.createdAt, ticket.resolvedAt)}
                   </span>
                 </span>
@@ -309,10 +421,10 @@ export default function TicketDetailPage() {
           {/* IT Staff actions */}
           {isITStaff && !isTicketClosed && (
             <div className="flex space-x-2">
-              <button className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
+              <button className="btn-secondary px-3 py-1.5 text-sm">
                 Assign
               </button>
-              <button className="rounded-lg bg-green-600 px-3 py-1.5 text-sm text-white hover:bg-green-700">
+              <button className="btn-success px-3 py-1.5 text-sm">
                 Resolve
               </button>
             </div>
@@ -321,9 +433,9 @@ export default function TicketDetailPage() {
 
         {/* Error message */}
         {error && (
-          <div className="mx-4 mt-4 rounded-lg bg-red-50 p-3 ring-1 ring-red-100">
-            <div className="flex items-center text-sm text-red-700">
-              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="mx-4 mt-4 alert-danger">
+            <div className="flex items-center text-sm text-danger-dark">
+              <svg className="mr-2 h-4 w-4 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               {error}
@@ -332,21 +444,21 @@ export default function TicketDetailPage() {
         )}
 
         {/* Chat area */}
-        <div className="flex flex-1 flex-col overflow-hidden rounded-xl bg-white mt-4 shadow-sm ring-1 ring-gray-100">
+        <div className="flex flex-1 flex-col overflow-hidden rounded-lg bg-white mt-4 shadow-card border border-border-light">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {/* Initial description */}
-            <div className="rounded-xl bg-gray-50 p-4">
+            <div className="rounded-lg bg-surface-light p-4">
               <div className="flex items-center space-x-2 mb-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary-700">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary">
                   {user?.fullName?.split(' ').map((n) => n[0]).join('').toUpperCase() || 'U'}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-900">{user?.fullName || 'You'}</p>
-                  <p className="text-xs text-gray-500">Original description</p>
+                  <p className="text-sm font-medium text-body-dark">{user?.fullName || 'You'}</p>
+                  <p className="text-xs text-text-muted">Original description</p>
                 </div>
               </div>
-              <p className="text-gray-700 whitespace-pre-wrap">{ticket.description}</p>
+              <p className="text-body-dark whitespace-pre-wrap">{ticket.description}</p>
             </div>
 
             {/* Conversation messages */}
@@ -355,42 +467,78 @@ export default function TicketDetailPage() {
                 key={message.id}
                 className={`chat-message flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                {message.role !== 'user' && (
-                  <div className="mr-3 flex-shrink-0">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-600 text-white">
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
+                {/* System messages (like password reset results) */}
+                {message.role === 'system' ? (
+                  <div className="w-full">
+                    <div className={`rounded-lg p-4 ${
+                      message.content.includes('✅')
+                        ? 'bg-success/10 border border-success/20'
+                        : message.content.includes('❌')
+                        ? 'bg-danger/10 border border-danger/20'
+                        : 'bg-info/10 border border-info/20'
+                    }`}>
+                      <div className="flex items-start space-x-3">
+                        <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                          message.content.includes('✅')
+                            ? 'bg-success/20 text-success'
+                            : message.content.includes('❌')
+                            ? 'bg-danger/20 text-danger'
+                            : 'bg-info/20 text-info'
+                        }`}>
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs font-semibold text-text-muted mb-2">IT System Notification</p>
+                          <div className="whitespace-pre-wrap text-sm text-body-dark">{message.content}</div>
+                          <p className="mt-2 text-xs text-text-gray">
+                            {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                )}
+                ) : (
+                  <>
+                    {message.role !== 'user' && (
+                      <div className="mr-3 flex-shrink-0">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white">
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                      </div>
+                    )}
 
-                <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-3 ${
-                    message.role === 'user'
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-100 text-gray-900'
-                  }`}
-                >
-                  {message.role !== 'user' && (
-                    <p className="mb-1 text-xs font-medium text-primary-600">AI Assistant</p>
-                  )}
-                  <div className="whitespace-pre-wrap text-sm">{message.content}</div>
-                  <p
-                    className={`mt-2 text-xs ${
-                      message.role === 'user' ? 'text-primary-200' : 'text-gray-400'
-                    }`}
-                  >
-                    {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                </div>
-
-                {message.role === 'user' && (
-                  <div className="ml-3 flex-shrink-0">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-sm font-medium text-gray-600">
-                      {user?.fullName?.split(' ').map((n) => n[0]).join('').toUpperCase() || 'U'}
+                    <div
+                      className={`max-w-[75%] rounded-2xl px-4 py-3 ${
+                        message.role === 'user'
+                          ? 'bg-primary text-white'
+                          : 'bg-surface-light text-body-dark'
+                      }`}
+                    >
+                      {message.role !== 'user' && (
+                        <p className="mb-1 text-xs font-medium text-primary">AI Assistant</p>
+                      )}
+                      <div className="whitespace-pre-wrap text-sm">{message.content}</div>
+                      <p
+                        className={`mt-2 text-xs ${
+                          message.role === 'user' ? 'text-primary-200' : 'text-text-gray'
+                        }`}
+                      >
+                        {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
                     </div>
-                  </div>
+
+                    {message.role === 'user' && (
+                      <div className="ml-3 flex-shrink-0">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary">
+                          {user?.fullName?.split(' ').map((n) => n[0]).join('').toUpperCase() || 'U'}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             ))}
@@ -399,20 +547,20 @@ export default function TicketDetailPage() {
             {sending && (
               <div className="flex justify-start">
                 <div className="mr-3 flex-shrink-0">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-600 text-white">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white">
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
                   </div>
                 </div>
-                <div className="rounded-2xl bg-gray-100 px-4 py-3">
+                <div className="rounded-2xl bg-surface-light px-4 py-3">
                   <div className="flex items-center space-x-2">
                     <div className="flex space-x-1">
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '0ms' }}></div>
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '150ms' }}></div>
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '300ms' }}></div>
+                      <div className="h-2 w-2 animate-bounce rounded-full bg-primary" style={{ animationDelay: '0ms' }}></div>
+                      <div className="h-2 w-2 animate-bounce rounded-full bg-primary" style={{ animationDelay: '150ms' }}></div>
+                      <div className="h-2 w-2 animate-bounce rounded-full bg-primary" style={{ animationDelay: '300ms' }}></div>
                     </div>
-                    <span className="text-sm text-gray-500">AI is thinking...</span>
+                    <span className="text-sm text-text-muted">AI is thinking...</span>
                   </div>
                 </div>
               </div>
@@ -421,9 +569,24 @@ export default function TicketDetailPage() {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Awaiting approval banner */}
+          {ticket.status === 'awaiting_approval' && (
+            <div className="border-t border-purple/20 bg-purple/10 px-4 py-3">
+              <div className="flex items-center justify-center space-x-2 text-purple">
+                <svg className="h-5 w-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="font-medium">Awaiting IT Admin Approval</span>
+              </div>
+              <p className="mt-1 text-center text-sm text-purple-dark">
+                Your password reset request is pending. You'll receive your temporary password here once approved.
+              </p>
+            </div>
+          )}
+
           {/* Input area */}
           {!isTicketClosed ? (
-            <div className="border-t border-gray-100 p-4">
+            <div className="border-t border-border-light p-4">
               <form onSubmit={handleSendMessage} className="flex items-center space-x-4">
                 <input
                   ref={inputRef}
@@ -431,13 +594,13 @@ export default function TicketDetailPage() {
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Describe your issue or respond to the AI assistant..."
-                  className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  className="input flex-1"
                   disabled={sending}
                 />
                 <button
                   type="submit"
                   disabled={sending || !newMessage.trim()}
-                  className="flex items-center space-x-2 rounded-xl bg-primary-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="btn-primary flex items-center space-x-2 px-5 py-3"
                 >
                   {sending ? (
                     <span className="spinner h-4 w-4"></span>
@@ -449,27 +612,27 @@ export default function TicketDetailPage() {
                   <span>Send</span>
                 </button>
               </form>
-              <p className="mt-2 text-center text-xs text-gray-400">
+              <p className="mt-2 text-center text-xs text-text-gray">
                 The AI assistant will help troubleshoot your issue or escalate to IT support if needed.
               </p>
             </div>
           ) : (
-            <div className="border-t border-gray-100 bg-green-50 p-4">
-              <div className="flex items-center justify-center space-x-2 text-green-700">
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="border-t border-border-light bg-success/10 p-4">
+              <div className="flex items-center justify-center space-x-2 text-success-dark">
+                <svg className="h-5 w-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span className="font-medium">This ticket has been {ticket.status}</span>
               </div>
               {ticket.resolution && (
-                <p className="mt-2 text-center text-sm text-green-600">
+                <p className="mt-2 text-center text-sm text-success">
                   Resolution: {ticket.resolution}
                 </p>
               )}
               <div className="mt-3 text-center">
                 <Link
                   href="/tickets/new"
-                  className="text-sm font-medium text-primary-600 hover:text-primary-700"
+                  className="text-sm font-medium text-primary-light hover:text-primary transition-colors"
                 >
                   Create a new ticket if you need more help
                 </Link>

@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+dist/
+out/
+
+# Environment files (injected via env_file in compose)
+.env
+.env.local
+.env.production
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Turbo cache
+.turbo/
+
+# TypeScript incremental
+*.tsbuildinfo
+
+# Docker
+docker-compose*.yml
+Dockerfile
+
+# Docs and misc
+*.md
+LICENSE

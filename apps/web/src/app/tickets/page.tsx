@@ -82,12 +82,12 @@ export default function TicketsPage() {
         {/* Page header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">My Tickets</h1>
-            <p className="mt-1 text-gray-500">View and manage your support requests</p>
+            <h1 className="text-2xl font-heading font-bold text-primary-dark">My Tickets</h1>
+            <p className="mt-1 text-text-muted">View and manage your support requests</p>
           </div>
           <Link
             href="/tickets/new"
-            className="flex items-center space-x-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
+            className="btn-primary flex items-center space-x-2"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -97,16 +97,16 @@ export default function TicketsPage() {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
+        <div className="flex flex-wrap items-center gap-4 rounded-lg bg-white p-4 shadow-card border border-border-light">
           <div className="flex items-center space-x-2">
-            <label htmlFor="status" className="text-sm font-medium text-gray-700">
+            <label htmlFor="status" className="text-sm font-medium text-body-dark">
               Status:
             </label>
             <select
               id="status"
               value={statusFilter}
               onChange={(e) => handleStatusChange(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="rounded border border-border-light px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             >
               {STATUS_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -117,14 +117,14 @@ export default function TicketsPage() {
           </div>
 
           <div className="flex items-center space-x-2">
-            <label htmlFor="category" className="text-sm font-medium text-gray-700">
+            <label htmlFor="category" className="text-sm font-medium text-body-dark">
               Category:
             </label>
             <select
               id="category"
               value={categoryFilter}
               onChange={(e) => handleCategoryChange(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="rounded border border-border-light px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             >
               {CATEGORY_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -141,7 +141,7 @@ export default function TicketsPage() {
                 setCategoryFilter('');
                 setPage(1);
               }}
-              className="text-sm text-gray-500 hover:text-gray-700"
+              className="text-sm text-text-muted hover:text-primary transition-colors"
             >
               Clear filters
             </button>
@@ -150,12 +150,12 @@ export default function TicketsPage() {
 
         {/* Error message */}
         {error && (
-          <div className="rounded-lg bg-red-50 p-4 ring-1 ring-red-100">
+          <div className="alert-danger">
             <div className="flex items-center">
-              <svg className="h-5 w-5 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-5 w-5 text-danger mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span className="text-sm text-red-700">{error}</span>
+              <span className="text-sm text-danger-dark">{error}</span>
             </div>
           </div>
         )}
@@ -164,7 +164,7 @@ export default function TicketsPage() {
         {loading ? (
           <div className="space-y-3">
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-16 animate-pulse rounded-xl bg-gray-100" />
+              <div key={i} className="h-16 animate-pulse rounded-lg bg-surface-light" />
             ))}
           </div>
         ) : (
@@ -180,22 +180,22 @@ export default function TicketsPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
-            <p className="text-sm text-gray-500">
+          <div className="flex items-center justify-between rounded-lg bg-white p-4 shadow-card border border-border-light">
+            <p className="text-sm text-text-muted">
               Page {page} of {totalPages}
             </p>
             <div className="flex space-x-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="btn-secondary px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Previous
               </button>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="btn-secondary px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Next
               </button>

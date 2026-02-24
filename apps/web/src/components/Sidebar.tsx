@@ -70,7 +70,7 @@ const ClipboardCheckIcon = () => (
   </svg>
 );
 
-const navItems: NavItem[] = [
+const mainNavItems: NavItem[] = [
   {
     label: 'Dashboard',
     href: '/dashboard',
@@ -86,6 +86,9 @@ const navItems: NavItem[] = [
     href: '/tickets/new',
     icon: <PlusIcon />,
   },
+];
+
+const itAdminNavItems: NavItem[] = [
   {
     label: 'All Tickets',
     href: '/admin/tickets',
@@ -107,13 +110,6 @@ const navItems: NavItem[] = [
     comingSoon: true,
   },
   {
-    label: 'User Management',
-    href: '/admin/users',
-    icon: <UsersIcon />,
-    roles: ['it_admin'],
-    comingSoon: true,
-  },
-  {
     label: 'Password Resets',
     href: '/admin/password-resets',
     icon: <KeyIcon />,
@@ -127,6 +123,24 @@ const navItems: NavItem[] = [
     roles: ['it_admin'],
     comingSoon: true,
   },
+];
+
+const hrNavItems: NavItem[] = [
+  {
+    label: 'HR Dashboard',
+    href: '/hr/dashboard',
+    icon: <DashboardIcon />,
+    roles: ['hr', 'it_admin'],
+  },
+  {
+    label: 'Employees',
+    href: '/hr/employees',
+    icon: <UsersIcon />,
+    roles: ['hr', 'it_admin'],
+  },
+];
+
+const systemNavItems: NavItem[] = [
   {
     label: 'Settings',
     href: '/settings',
@@ -160,10 +174,11 @@ export function Sidebar() {
     return () => clearInterval(interval);
   }, [user?.role, session?.accessToken]);
 
-  const filteredNavItems = navItems.filter((item) => {
-    if (!item.roles) return true;
-    return user?.role && item.roles.includes(user.role);
-  });
+  const filterByRole = (items: NavItem[]) =>
+    items.filter((item) => {
+      if (!item.roles) return true;
+      return user?.role && item.roles.includes(user.role);
+    });
 
   const isActive = (href: string) => {
     if (href === '/dashboard') {
@@ -175,20 +190,23 @@ export function Sidebar() {
     return pathname?.startsWith(href);
   };
 
+  const filteredITItems = filterByRole(itAdminNavItems);
+  const filteredHRItems = filterByRole(hrNavItems);
+
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-slate-900 text-white">
+    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-primary-800 text-white">
       <div className="flex h-full flex-col">
         {/* Logo */}
-        <div className="flex h-16 items-center border-b border-slate-700 px-6">
+        <div className="flex h-16 items-center border-b border-primary-700 px-6">
           <div className="flex items-center space-x-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-600">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-light">
               <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
             </div>
             <div>
-              <h1 className="text-lg font-bold">IT Helpdesk</h1>
-              <p className="text-xs text-slate-400">Support Portal</p>
+              <h1 className="text-lg font-heading font-bold">3Lines IT</h1>
+              <p className="text-xs text-primary-200">Support Portal</p>
             </div>
           </div>
         </div>
@@ -196,24 +214,24 @@ export function Sidebar() {
         {/* Navigation */}
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           <div className="mb-4">
-            <p className="px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <p className="px-3 text-xs font-semibold uppercase tracking-wider text-primary-300">
               Main
             </p>
           </div>
 
-          {filteredNavItems.slice(0, 3).map((item) => (
+          {mainNavItems.map((item) => (
             <NavLink key={item.href} item={item} isActive={isActive(item.href)} />
           ))}
 
           {/* IT Staff Section */}
-          {user?.role && ['it_support', 'it_admin'].includes(user.role) && (
+          {filteredITItems.length > 0 && (
             <>
               <div className="mb-4 mt-8">
-                <p className="px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <p className="px-3 text-xs font-semibold uppercase tracking-wider text-primary-300">
                   IT Administration
                 </p>
               </div>
-              {filteredNavItems.slice(3, -1).map((item) => (
+              {filteredITItems.map((item) => (
                 <NavLink
                   key={item.href}
                   item={item}
@@ -224,25 +242,39 @@ export function Sidebar() {
             </>
           )}
 
+          {/* HR Section */}
+          {filteredHRItems.length > 0 && (
+            <>
+              <div className="mb-4 mt-8">
+                <p className="px-3 text-xs font-semibold uppercase tracking-wider text-primary-300">
+                  HR Management
+                </p>
+              </div>
+              {filteredHRItems.map((item) => (
+                <NavLink key={item.href} item={item} isActive={isActive(item.href)} />
+              ))}
+            </>
+          )}
+
           <div className="mb-4 mt-8">
-            <p className="px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <p className="px-3 text-xs font-semibold uppercase tracking-wider text-primary-300">
               System
             </p>
           </div>
-          {filteredNavItems.slice(-1).map((item) => (
+          {systemNavItems.map((item) => (
             <NavLink key={item.href} item={item} isActive={isActive(item.href)} />
           ))}
         </nav>
 
         {/* User info */}
-        <div className="border-t border-slate-700 p-4">
+        <div className="border-t border-primary-700 p-4">
           <div className="flex items-center space-x-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-700 text-sm font-medium">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-600 text-sm font-medium">
               {user?.fullName?.split(' ').map((n) => n[0]).join('').toUpperCase() || '?'}
             </div>
             <div className="flex-1 min-w-0">
               <p className="truncate text-sm font-medium">{user?.fullName || 'User'}</p>
-              <p className="truncate text-xs text-slate-400 capitalize">{user?.role?.replace('_', ' ') || 'Employee'}</p>
+              <p className="truncate text-xs text-primary-300 capitalize">{user?.role?.replace('_', ' ') || 'Employee'}</p>
             </div>
           </div>
         </div>
@@ -255,11 +287,11 @@ function NavLink({ item, isActive, badgeCount = 0 }: { item: NavItem; isActive: 
   if (item.comingSoon) {
     return (
       <div
-        className="group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 cursor-not-allowed opacity-60"
+        className="group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium text-primary-400 cursor-not-allowed opacity-60"
       >
-        <span className="mr-3 text-slate-500">{item.icon}</span>
+        <span className="mr-3 text-primary-500">{item.icon}</span>
         <span>{item.label}</span>
-        <span className="ml-auto rounded bg-slate-700 px-1.5 py-0.5 text-xs text-slate-400">
+        <span className="ml-auto rounded bg-primary-700 px-1.5 py-0.5 text-xs text-primary-300">
           Soon
         </span>
       </div>
@@ -271,16 +303,16 @@ function NavLink({ item, isActive, badgeCount = 0 }: { item: NavItem; isActive: 
       href={item.href}
       className={`group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
         isActive
-          ? 'bg-primary-600 text-white'
-          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+          ? 'bg-primary-light text-white'
+          : 'text-primary-100 hover:bg-primary-700 hover:text-white'
       }`}
     >
-      <span className={`mr-3 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'}`}>
+      <span className={`mr-3 ${isActive ? 'text-white' : 'text-primary-300 group-hover:text-white'}`}>
         {item.icon}
       </span>
       <span>{item.label}</span>
       {badgeCount > 0 && (
-        <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold text-white animate-pulse">
+        <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-danger px-1.5 text-xs font-bold text-white animate-pulse">
           {badgeCount}
         </span>
       )}

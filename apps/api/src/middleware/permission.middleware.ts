@@ -188,3 +188,26 @@ export function requireITAdmin(req: Request, res: Response, next: NextFunction):
 
   next();
 }
+
+/**
+ * Middleware that requires the user to be HR staff or IT admin
+ */
+export function requireHR(req: Request, res: Response, next: NextFunction): void {
+  if (!isAuthenticated(req)) {
+    res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Authentication required',
+    });
+    return;
+  }
+
+  if (!['hr', 'it_admin'].includes(req.user.role)) {
+    res.status(403).json({
+      error: 'Forbidden',
+      message: 'HR staff access required',
+    });
+    return;
+  }
+
+  next();
+}

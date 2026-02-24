@@ -72,7 +72,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex">
       {/* Left side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary-600 via-primary-700 to-slate-900 p-12 flex-col justify-between">
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-primary-dark to-primary-800 p-12 flex-col justify-between">
         <div>
           <div className="flex items-center space-x-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/10 backdrop-blur">
@@ -81,75 +81,75 @@ export default function LoginPage() {
               </svg>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">IT Helpdesk</h1>
-              <p className="text-primary-200 text-sm">Support Portal</p>
+              <h1 className="text-2xl font-heading font-bold text-white">3Lines IT Helpdesk</h1>
+              <p className="text-primary-100 text-sm">Support Portal</p>
             </div>
           </div>
         </div>
 
         <div className="space-y-6">
-          <h2 className="text-4xl font-bold text-white leading-tight">
+          <h2 className="text-4xl font-heading font-bold text-white leading-tight">
             Get IT support<br />in minutes, not hours.
           </h2>
-          <p className="text-primary-200 text-lg max-w-md">
+          <p className="text-primary-100 text-lg max-w-md">
             Our AI-powered assistant helps you troubleshoot common issues instantly. For complex problems, we'll connect you with our expert IT team.
           </p>
           <div className="grid grid-cols-3 gap-4 pt-4">
             <div className="bg-white/10 backdrop-blur rounded-lg p-4">
-              <div className="text-3xl font-bold text-white">24/7</div>
-              <div className="text-primary-200 text-sm">AI Support</div>
+              <div className="text-3xl font-heading font-bold text-white">24/7</div>
+              <div className="text-primary-100 text-sm">AI Support</div>
             </div>
             <div className="bg-white/10 backdrop-blur rounded-lg p-4">
-              <div className="text-3xl font-bold text-white">&lt;5m</div>
-              <div className="text-primary-200 text-sm">Avg Response</div>
+              <div className="text-3xl font-heading font-bold text-white">&lt;5m</div>
+              <div className="text-primary-100 text-sm">Avg Response</div>
             </div>
             <div className="bg-white/10 backdrop-blur rounded-lg p-4">
-              <div className="text-3xl font-bold text-white">85%</div>
-              <div className="text-primary-200 text-sm">Auto-Resolved</div>
+              <div className="text-3xl font-heading font-bold text-white">85%</div>
+              <div className="text-primary-100 text-sm">Auto-Resolved</div>
             </div>
           </div>
         </div>
 
-        <div className="text-primary-300 text-sm">
-          &copy; 2025 IT Helpdesk. All rights reserved.
+        <div className="text-primary-200 text-sm">
+          &copy; 2025 3Lines IT Helpdesk. All rights reserved.
         </div>
       </div>
 
       {/* Right side - Login form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-gray-50">
+      <div className="flex-1 flex items-center justify-center p-8 bg-surface-light">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden mb-8 text-center">
             <div className="inline-flex items-center space-x-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-600">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
                 <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
               </div>
-              <span className="text-xl font-bold text-gray-900">IT Helpdesk</span>
+              <span className="text-xl font-heading font-bold text-body-dark">3Lines IT Helpdesk</span>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-xl p-8 ring-1 ring-gray-100">
+          <div className="card rounded-xl shadow-card p-8">
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
-              <p className="mt-2 text-gray-600">Sign in to access your helpdesk portal</p>
+              <h2 className="text-2xl font-heading font-bold text-primary-dark">Welcome back</h2>
+              <p className="mt-2 text-text-muted">Sign in to access your helpdesk portal</p>
             </div>
 
             {error && (
-              <div className="mb-6 rounded-lg bg-red-50 p-4 ring-1 ring-red-100">
+              <div className="alert-danger mb-6">
                 <div className="flex items-center">
-                  <svg className="h-5 w-5 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-5 w-5 text-danger mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="text-sm text-red-700">{error}</span>
+                  <span className="text-sm text-danger-dark">{error}</span>
                 </div>
               </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="email" className="block text-sm font-medium text-body-dark mb-1.5">
                   Email address
                 </label>
                 <input
@@ -160,13 +160,13 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow"
+                  className="input w-full"
                   placeholder="you@company.com"
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="password" className="block text-sm font-medium text-body-dark mb-1.5">
                   Password
                 </label>
                 <input
@@ -177,7 +177,7 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow"
+                  className="input w-full"
                   placeholder="Enter your password"
                 />
               </div>
@@ -186,11 +186,11 @@ export default function LoginPage() {
                 <label className="flex items-center">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    className="h-4 w-4 text-primary border-border-light rounded focus:ring-primary"
                   />
-                  <span className="ml-2 text-sm text-gray-600">Remember me</span>
+                  <span className="ml-2 text-sm text-text-muted">Remember me</span>
                 </label>
-                <button type="button" className="text-sm text-primary-600 hover:text-primary-700 font-medium">
+                <button type="button" className="text-sm text-primary-light hover:text-primary font-medium transition-colors">
                   Forgot password?
                 </button>
               </div>
@@ -198,7 +198,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex items-center justify-center px-4 py-3 border border-transparent text-base font-medium rounded-xl text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="btn-primary w-full py-3 text-base font-medium"
               >
                 {loading ? (
                   <>
@@ -211,22 +211,22 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <div className="mt-6 pt-6 border-t border-gray-100">
-              <p className="text-center text-sm text-gray-500">
+            <div className="mt-6 pt-6 border-t border-border-light">
+              <p className="text-center text-sm text-text-gray">
                 Need help? Contact your IT administrator
               </p>
             </div>
           </div>
 
           {/* Demo credentials hint */}
-          <div className="mt-6 p-4 bg-blue-50 rounded-xl ring-1 ring-blue-100">
+          <div className="mt-6 p-4 bg-info/10 rounded-lg border border-info/20">
             <div className="flex items-start">
-              <svg className="h-5 w-5 text-blue-500 mt-0.5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-5 w-5 text-info mt-0.5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <div className="text-sm text-blue-800">
+              <div className="text-sm text-info-dark">
                 <p className="font-medium">Demo Environment</p>
-                <p className="mt-1 text-blue-600">Use your company credentials to sign in, or contact IT for access.</p>
+                <p className="mt-1 text-info">Use your company credentials to sign in, or contact IT for access.</p>
               </div>
             </div>
           </div>

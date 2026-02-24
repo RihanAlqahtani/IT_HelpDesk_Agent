@@ -16,6 +16,7 @@ import authRoutes from './routes/auth.routes.js';
 import ticketRoutes from './routes/ticket.routes.js';
 import agentRoutes from './routes/agent.routes.js';
 import privilegedRoutes from './routes/privileged.routes.js';
+import hrRoutes from './routes/hr.routes.js';
 
 const app = express();
 
@@ -82,6 +83,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/agent', agentRoutes);
 app.use('/api/privileged', privilegedRoutes);
+app.use('/api/hr', hrRoutes);
 
 // =============================================================================
 // ERROR HANDLING

@@ -31,6 +31,7 @@ export const PERMISSIONS = {
   PERMISSION_MODIFY: 'permission.modify' as Permission,
   ONBOARDING_EXECUTE: 'onboarding.execute' as Permission,
   OFFBOARDING_EXECUTE: 'offboarding.execute' as Permission,
+  EMPLOYEE_MODIFY: 'employee.modify' as Permission,
 } as const;
 
 /**
@@ -111,15 +112,22 @@ export const PERMISSION_INFO: Record<Permission, PermissionInfo> = {
     name: 'onboarding.execute',
     description: 'Execute employee onboarding workflows',
     isPrivileged: true,
-    isEnabledInMVP: false,
-    minimumRole: 'it_admin',
+    isEnabledInMVP: true,
+    minimumRole: 'hr',
   },
   'offboarding.execute': {
     name: 'offboarding.execute',
     description: 'Execute employee offboarding workflows',
     isPrivileged: true,
-    isEnabledInMVP: false,
-    minimumRole: 'it_admin',
+    isEnabledInMVP: true,
+    minimumRole: 'hr',
+  },
+  'employee.modify': {
+    name: 'employee.modify',
+    description: 'Modify employee Azure AD properties (department, job title)',
+    isPrivileged: true,
+    isEnabledInMVP: true,
+    minimumRole: 'hr',
   },
 };
 
@@ -151,6 +159,12 @@ export const ROLES: Record<UserRole, RoleInfo> = {
     level: 4,
     canAccessAdmin: false,
   },
+  hr: {
+    name: 'hr',
+    description: 'HR staff - manages onboarding, offboarding, and employee updates',
+    level: 2,
+    canAccessAdmin: true,
+  },
 };
 
 /**
@@ -167,6 +181,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
   it_admin: Object.values(PERMISSIONS),
   system_service: [], // Service accounts get permissions via service role key
+  hr: [
+    PERMISSIONS.TICKET_READ,
+    PERMISSIONS.TICKET_CREATE,
+    PERMISSIONS.ONBOARDING_EXECUTE,
+    PERMISSIONS.OFFBOARDING_EXECUTE,
+    PERMISSIONS.EMPLOYEE_MODIFY,
+  ],
 };
 
 /**

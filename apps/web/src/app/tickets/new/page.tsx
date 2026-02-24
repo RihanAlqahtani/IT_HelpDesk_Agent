@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/store';
-import { agentAPI, Ticket, AgentResponse, APIError } from '@/lib/api';
+import { agentAPI, ticketsAPI, Ticket, AgentResponse, APIError, ConversationMessage } from '@/lib/api';
 import { DashboardLayout } from '@/components';
 
 interface Message {
@@ -34,6 +34,104 @@ export default function NewTicketPage() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Polling for updates when ticket is awaiting approval (to get temp password after admin approves)
+  const [shouldPoll, setShouldPoll] = useState(false);
+  const prevStatusRef = useRef<string | null>(null);
+
+  // Determine if we should be polling based on ticket status
+  useEffect(() => {
+    if (!ticket) return;
+
+    // Start polling when ticket enters awaiting_approval
+    if (ticket.status === 'awaiting_approval') {
+      setShouldPoll(true);
+    }
+
+    // When status changes from awaiting_approval, do a final fetch for the password message
+    if (prevStatusRef.current === 'awaiting_approval' && ticket.status !== 'awaiting_approval') {
+      const fetchFinalMessages = async () => {
+        if (!session?.accessToken || !ticket) return;
+        try {
+          const historyData = await agentAPI.getHistory(session.accessToken, ticket.id);
+          // Check for system messages (password results)
+          const systemMessages = historyData.messages.filter(
+            (m: ConversationMessage) => m.role === 'system'
+          );
+          if (systemMessages.length > 0) {
+            // Add system messages to our local messages
+            const newMessages: Message[] = systemMessages.map((m: ConversationMessage) => ({
+              id: m.id,
+              role: 'agent' as const, // Display as agent message
+              content: m.content,
+              timestamp: new Date(m.createdAt),
+            }));
+            setMessages((prev) => [...prev, ...newMessages]);
+          }
+        } catch (err) {
+          console.error('Final fetch error:', err);
+        }
+        setShouldPoll(false);
+      };
+      fetchFinalMessages();
+    }
+
+    prevStatusRef.current = ticket.status;
+  }, [ticket?.status, session?.accessToken]);
+
+  // Active polling when awaiting approval
+  useEffect(() => {
+    if (!session?.accessToken || !ticket || !shouldPoll) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        // Fetch latest ticket status and messages
+        const [ticketData, historyData] = await Promise.all([
+          ticketsAPI.get(session.accessToken, ticket.id),
+          agentAPI.getHistory(session.accessToken, ticket.id),
+        ]);
+
+        // Update ticket if status changed
+        if (ticketData.status !== ticket.status) {
+          setTicket(ticketData);
+        }
+
+        // Check for new system messages (password results)
+        const systemMessages = historyData.messages.filter(
+          (m: ConversationMessage) => m.role === 'system'
+        );
+        const existingSystemIds = messages
+          .filter((m) => m.id.startsWith('system-') || historyData.messages.some((hm: ConversationMessage) => hm.id === m.id && hm.role === 'system'))
+          .map((m) => m.id);
+
+        const newSystemMessages = systemMessages.filter(
+          (m: ConversationMessage) => !existingSystemIds.includes(m.id)
+        );
+
+        if (newSystemMessages.length > 0) {
+          const newMessages: Message[] = newSystemMessages.map((m: ConversationMessage) => ({
+            id: m.id,
+            role: 'agent' as const,
+            content: m.content,
+            timestamp: new Date(m.createdAt),
+          }));
+          setMessages((prev) => [...prev, ...newMessages]);
+
+          // Stop polling if we got a password message
+          const hasPasswordMessage = newSystemMessages.some(
+            (m: ConversationMessage) => m.content.includes('temporary password')
+          );
+          if (hasPasswordMessage) {
+            setShouldPoll(false);
+          }
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+      }
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [session?.accessToken, ticket?.id, ticket?.status, shouldPoll, messages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -77,12 +175,13 @@ export default function NewTicketPage() {
         // Subsequent messages - continue conversation
         const result = await agentAPI.chat(session.accessToken, ticket.id, messageContent);
 
-        // Add AI response
+        // Use the saved agent message content directly from API response
+        // This ensures consistent display and avoids buildAgentContent missing handlers
         const agentMessage: Message = {
           id: result.conversationId,
           role: 'agent',
-          content: buildAgentContent(result.response),
-          timestamp: new Date(),
+          content: result.agentMessage.content,
+          timestamp: new Date(result.agentMessage.createdAt),
         };
         setMessages((prev) => [...prev, agentMessage]);
 
@@ -91,6 +190,8 @@ export default function NewTicketPage() {
           setTicket((prev) => prev ? { ...prev, status: 'escalated' } : null);
         } else if (result.ticketUpdated && result.response.decision === 'resolve') {
           setTicket((prev) => prev ? { ...prev, status: 'resolved' } : null);
+        } else if (result.ticketUpdated && result.response.decision === 'request_approval') {
+          setTicket((prev) => prev ? { ...prev, status: 'awaiting_approval' } : null);
         }
       }
     } catch (err) {
@@ -141,16 +242,31 @@ export default function NewTicketPage() {
       parts.push('\nIf you have any other issues, feel free to start a new conversation.');
     }
 
+    // Handle password reset / privileged action approval requests
+    if (response.decision === 'request_approval') {
+      if (parts.length > 0) parts.push('');
+      parts.push("🔐 **Password Reset Request Submitted**");
+      parts.push('');
+      parts.push("I've submitted a password reset request on your behalf. An IT Administrator will review and approve it shortly.");
+      parts.push('');
+      parts.push("**What happens next:**");
+      parts.push("1. An IT Admin will receive your request");
+      parts.push("2. Once approved, your password will be reset automatically");
+      parts.push("3. You'll receive your temporary password right here in this chat");
+      parts.push('');
+      parts.push("⏳ Please keep this chat open or check back soon for your new password.");
+    }
+
     return parts.join('\n') || 'How can I help you with this issue?';
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'open': return 'bg-blue-100 text-blue-800';
-      case 'in_progress': return 'bg-amber-100 text-amber-800';
-      case 'escalated': return 'bg-red-100 text-red-800';
-      case 'resolved': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'open': return 'bg-info/10 text-info-dark';
+      case 'in_progress': return 'bg-warning/10 text-warning-dark';
+      case 'escalated': return 'bg-danger/10 text-danger-dark';
+      case 'resolved': return 'bg-success/10 text-success-dark';
+      default: return 'bg-surface-light text-body-dark';
     }
   };
 
@@ -171,11 +287,11 @@ export default function NewTicketPage() {
     <DashboardLayout>
       <div className="flex h-[calc(100vh-130px)] flex-col">
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-gray-200 pb-4">
+        <div className="flex items-start justify-between border-b border-border-light pb-4">
           <div className="flex items-start space-x-4">
             <Link
               href="/dashboard"
-              className="mt-1 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              className="mt-1 rounded-lg p-1.5 text-text-gray hover:bg-surface-light hover:text-body-dark transition-colors"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -185,19 +301,19 @@ export default function NewTicketPage() {
               {ticket ? (
                 <>
                   <div className="flex items-center space-x-3">
-                    <h1 className="text-xl font-bold text-gray-900">Ticket #{ticket.ticketNumber}</h1>
+                    <h1 className="text-xl font-heading font-bold text-primary-dark">Ticket #{ticket.ticketNumber}</h1>
                     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${getStatusColor(ticket.status)}`}>
                       {ticket.status.replace('_', ' ')}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm text-gray-500">
+                  <p className="mt-1 text-sm text-text-muted">
                     {formatCategory(ticket.category)} &bull; {ticket.severity} severity
                   </p>
                 </>
               ) : (
                 <>
-                  <h1 className="text-xl font-bold text-gray-900">Get IT Help</h1>
-                  <p className="mt-1 text-gray-500">
+                  <h1 className="text-xl font-heading font-bold text-primary-dark">Get IT Help</h1>
+                  <p className="mt-1 text-text-muted">
                     Describe your issue and I'll help you troubleshoot
                   </p>
                 </>
@@ -208,9 +324,9 @@ export default function NewTicketPage() {
 
         {/* Error message */}
         {error && (
-          <div className="mx-4 mt-4 rounded-lg bg-red-50 p-3 ring-1 ring-red-100">
-            <div className="flex items-center text-sm text-red-700">
-              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="mx-4 mt-4 alert-danger">
+            <div className="flex items-center text-sm text-danger-dark">
+              <svg className="mr-2 h-4 w-4 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               {error}
@@ -219,19 +335,19 @@ export default function NewTicketPage() {
         )}
 
         {/* Chat area */}
-        <div className="flex flex-1 flex-col overflow-hidden rounded-xl bg-white mt-4 shadow-sm ring-1 ring-gray-100">
+        <div className="flex flex-1 flex-col overflow-hidden rounded-lg bg-white mt-4 shadow-card border border-border-light">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {/* Welcome message if no messages yet */}
             {messages.length === 0 && (
               <div className="text-center py-12">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary-100">
-                  <svg className="h-8 w-8 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-8 w-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                   </svg>
                 </div>
-                <h3 className="mt-4 text-lg font-semibold text-gray-900">How can I help you today?</h3>
-                <p className="mt-2 text-gray-500 max-w-md mx-auto">
+                <h3 className="mt-4 text-lg font-heading font-semibold text-body-dark">How can I help you today?</h3>
+                <p className="mt-2 text-text-muted max-w-md mx-auto">
                   Describe your IT issue in your own words. I'll analyze the problem, ask any clarifying questions, and guide you through troubleshooting steps.
                 </p>
                 <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -244,7 +360,7 @@ export default function NewTicketPage() {
                     <button
                       key={suggestion}
                       onClick={() => setInputValue(suggestion)}
-                      className="rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-700 hover:bg-gray-200 transition"
+                      className="rounded-full bg-primary-50 px-4 py-2 text-sm text-primary hover:bg-primary-100 transition-colors"
                     >
                       {suggestion}
                     </button>
@@ -261,7 +377,7 @@ export default function NewTicketPage() {
               >
                 {message.role !== 'user' && (
                   <div className="mr-3 flex-shrink-0">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-600 text-white">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white">
                       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                       </svg>
@@ -272,17 +388,17 @@ export default function NewTicketPage() {
                 <div
                   className={`max-w-[75%] rounded-2xl px-4 py-3 ${
                     message.role === 'user'
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-100 text-gray-900'
+                      ? 'bg-primary text-white'
+                      : 'bg-surface-light text-body-dark'
                   }`}
                 >
                   {message.role !== 'user' && (
-                    <p className="mb-1 text-xs font-medium text-primary-600">AI Assistant</p>
+                    <p className="mb-1 text-xs font-medium text-primary">AI Assistant</p>
                   )}
                   <div className="whitespace-pre-wrap text-sm">{message.content}</div>
                   <p
                     className={`mt-2 text-xs ${
-                      message.role === 'user' ? 'text-primary-200' : 'text-gray-400'
+                      message.role === 'user' ? 'text-primary-200' : 'text-text-gray'
                     }`}
                   >
                     {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -291,7 +407,7 @@ export default function NewTicketPage() {
 
                 {message.role === 'user' && (
                   <div className="ml-3 flex-shrink-0">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-sm font-medium text-gray-600">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary">
                       {user?.fullName?.split(' ').map((n) => n[0]).join('').toUpperCase() || 'U'}
                     </div>
                   </div>
@@ -303,20 +419,20 @@ export default function NewTicketPage() {
             {sending && (
               <div className="flex justify-start">
                 <div className="mr-3 flex-shrink-0">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-600 text-white">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white">
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
                   </div>
                 </div>
-                <div className="rounded-2xl bg-gray-100 px-4 py-3">
+                <div className="rounded-2xl bg-surface-light px-4 py-3">
                   <div className="flex items-center space-x-2">
                     <div className="flex space-x-1">
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '0ms' }}></div>
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '150ms' }}></div>
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '300ms' }}></div>
+                      <div className="h-2 w-2 animate-bounce rounded-full bg-primary" style={{ animationDelay: '0ms' }}></div>
+                      <div className="h-2 w-2 animate-bounce rounded-full bg-primary" style={{ animationDelay: '150ms' }}></div>
+                      <div className="h-2 w-2 animate-bounce rounded-full bg-primary" style={{ animationDelay: '300ms' }}></div>
                     </div>
-                    <span className="text-sm text-gray-500">
+                    <span className="text-sm text-text-muted">
                       {ticket ? 'AI is thinking...' : 'Creating ticket and analyzing...'}
                     </span>
                   </div>
@@ -329,7 +445,7 @@ export default function NewTicketPage() {
 
           {/* Input area */}
           {!isTicketClosed ? (
-            <div className="border-t border-gray-100 p-4">
+            <div className="border-t border-border-light p-4">
               <form onSubmit={handleSendMessage} className="flex items-end space-x-4">
                 <textarea
                   ref={inputRef}
@@ -337,7 +453,7 @@ export default function NewTicketPage() {
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={ticket ? "Describe what happened after trying the steps..." : "Describe your IT issue..."}
-                  className="flex-1 resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  className="input flex-1 resize-none"
                   disabled={sending}
                   rows={1}
                   style={{ minHeight: '48px', maxHeight: '120px' }}
@@ -345,7 +461,7 @@ export default function NewTicketPage() {
                 <button
                   type="submit"
                   disabled={sending || !inputValue.trim()}
-                  className="flex items-center space-x-2 rounded-xl bg-primary-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="btn-primary flex items-center space-x-2 px-5 py-3"
                 >
                   {sending ? (
                     <span className="spinner h-4 w-4"></span>
@@ -357,7 +473,7 @@ export default function NewTicketPage() {
                   <span>Send</span>
                 </button>
               </form>
-              <p className="mt-2 text-center text-xs text-gray-400">
+              <p className="mt-2 text-center text-xs text-text-gray">
                 {ticket
                   ? "Continue the conversation or describe any new issues"
                   : "The AI will classify your issue and guide you through troubleshooting"
@@ -365,18 +481,18 @@ export default function NewTicketPage() {
               </p>
             </div>
           ) : (
-            <div className="border-t border-gray-100 bg-gray-50 p-4">
-              <div className="flex items-center justify-center space-x-2 text-gray-700">
+            <div className="border-t border-border-light bg-surface-light p-4">
+              <div className="flex items-center justify-center space-x-2 text-body-dark">
                 {ticket?.status === 'escalated' ? (
                   <>
-                    <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="h-5 w-5 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                     <span className="font-medium">This issue has been escalated to IT support</span>
                   </>
                 ) : (
                   <>
-                    <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="h-5 w-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <span className="font-medium">This ticket has been resolved</span>
@@ -386,7 +502,7 @@ export default function NewTicketPage() {
               <div className="mt-3 text-center">
                 <Link
                   href={`/tickets/${ticket?.id}`}
-                  className="text-sm font-medium text-primary-600 hover:text-primary-700 mr-4"
+                  className="text-sm font-medium text-primary-light hover:text-primary mr-4 transition-colors"
                 >
                   View ticket details
                 </Link>
@@ -397,7 +513,7 @@ export default function NewTicketPage() {
                     setInputValue('');
                     setError('');
                   }}
-                  className="text-sm font-medium text-gray-600 hover:text-gray-700"
+                  className="text-sm font-medium text-text-muted hover:text-body-dark transition-colors"
                 >
                   Start new conversation
                 </button>

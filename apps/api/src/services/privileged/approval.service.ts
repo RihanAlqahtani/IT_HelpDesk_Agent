@@ -141,40 +141,80 @@ export class ApprovalService {
       return [];
     }
 
-    // Get pending requests with user info
-    const { data, error } = await supabaseAdmin
+    // Get pending requests - use a two-step approach for reliability
+    // Step 1: Get the approval requests
+    const { data: requestsData, error: requestsError } = await supabaseAdmin
       .from('it_approval_requests')
-      .select(`
-        *,
-        requester:requested_by(full_name, email),
-        ticket:ticket_id(subject)
-      `)
+      .select('*')
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Failed to fetch pending requests:', error);
+    if (requestsError) {
+      console.error('Failed to fetch pending requests:', requestsError);
       return [];
     }
 
-    return (data || []).map((row) => ({
-      id: row.id,
-      ticketId: row.ticket_id,
-      requestedBy: row.requested_by,
-      requestedByName: (row.requester as any)?.full_name || row.action_payload?.requestedByName,
-      requestedByEmail: (row.requester as any)?.email || row.action_payload?.requestedByEmail,
-      approvedBy: row.approved_by,
-      actionType: row.action_type,
-      actionPayload: row.action_payload,
-      status: row.status,
-      justification: row.justification,
-      rejectionReason: row.rejection_reason,
-      reviewedAt: row.reviewed_at ? new Date(row.reviewed_at) : undefined,
-      executedAt: row.executed_at ? new Date(row.executed_at) : undefined,
-      expiresAt: row.expires_at ? new Date(row.expires_at) : undefined,
-      createdAt: new Date(row.created_at),
-      ticketSubject: (row.ticket as any)?.subject || row.action_payload?.ticketSubject,
-    }));
+    if (!requestsData || requestsData.length === 0) {
+      return [];
+    }
+
+    // Step 2: Fetch user details separately for each request
+    const requests = await Promise.all(
+      requestsData.map(async (row) => {
+        // Try to get user details from the it_users table
+        let userName = row.action_payload?.requestedByName || 'Unknown User';
+        let userEmail = row.action_payload?.requestedByEmail || '';
+
+        // Also try to fetch from it_users table directly
+        if (row.requested_by) {
+          const { data: userData } = await supabaseAdmin
+            .from('it_users')
+            .select('full_name, email')
+            .eq('id', row.requested_by)
+            .single();
+
+          if (userData) {
+            userName = userData.full_name || userName;
+            userEmail = userData.email || userEmail;
+          }
+        }
+
+        // Get ticket subject
+        let ticketSubject = row.action_payload?.ticketSubject || 'Unknown';
+        if (row.ticket_id) {
+          const { data: ticketData } = await supabaseAdmin
+            .from('it_tickets')
+            .select('subject')
+            .eq('id', row.ticket_id)
+            .single();
+
+          if (ticketData) {
+            ticketSubject = ticketData.subject;
+          }
+        }
+
+        return {
+          id: row.id,
+          ticketId: row.ticket_id,
+          requestedBy: row.requested_by,
+          requestedByName: userName,
+          requestedByEmail: userEmail,
+          approvedBy: row.approved_by,
+          actionType: row.action_type,
+          actionPayload: row.action_payload,
+          status: row.status,
+          justification: row.justification,
+          rejectionReason: row.rejection_reason,
+          reviewedAt: row.reviewed_at ? new Date(row.reviewed_at) : undefined,
+          executedAt: row.executed_at ? new Date(row.executed_at) : undefined,
+          expiresAt: row.expires_at ? new Date(row.expires_at) : undefined,
+          createdAt: new Date(row.created_at),
+          ticketSubject,
+        };
+      })
+    );
+
+    return requests;
   }
 
   /**
@@ -399,9 +439,11 @@ Hi ${userName}! Your password reset has been approved by IT.
 
 ⚠️ **Important:** This temporary password must be changed on your first login.
 
-If you have any issues, please reply to this conversation.`;
+---
+
+**Please reply here once you've successfully logged in with your new password** so we can close this ticket. If you have any issues, let us know!`;
     } else if (result.success) {
-      content = `✅ **Action Completed**\n\n${result.data?.message || 'The requested action has been completed successfully.'}`;
+      content = `✅ **Action Completed**\n\n${result.data?.message || 'The requested action has been completed successfully.'}\n\n**Please confirm if everything is working correctly** so we can close this ticket.`;
     } else {
       content = `❌ **Action Failed**\n\nThe requested action could not be completed: ${result.error}\n\nPlease contact IT support for assistance.`;
     }
@@ -414,20 +456,19 @@ If you have any issues, please reply to this conversation.`;
         role: 'system',
         content,
         agent_response: {
-          decision: result.success ? 'resolve' : 'escalate',
+          decision: result.success ? 'guide' : 'escalate',  // Don't auto-resolve, wait for confirmation
           actionResult: result,
+          awaitingConfirmation: result.success,  // Flag to indicate we're waiting for user confirmation
         },
       });
 
-    // Update ticket status based on result
+    // Update ticket status - keep in_progress, don't auto-resolve
+    // The ticket should only be resolved when the user confirms the password works
     if (result.success && actionType === 'password_reset') {
-      // Mark as resolved since password was reset
       await supabaseAdmin
         .from('it_tickets')
         .update({
-          status: 'resolved',
-          resolution: 'Password reset completed via AI assistance',
-          resolved_at: new Date().toISOString(),
+          status: 'in_progress',  // Keep open until user confirms
         })
         .eq('id', ticketId);
     }

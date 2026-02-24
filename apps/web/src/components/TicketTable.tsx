@@ -18,32 +18,32 @@ export function TicketTable({ tickets, showUser = false, emptyMessage = 'No tick
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'open':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-info/10 text-info-dark';
       case 'in_progress':
-        return 'bg-amber-100 text-amber-800';
+        return 'bg-warning/10 text-warning-dark';
       case 'awaiting_approval':
-        return 'bg-purple-100 text-purple-800';
+        return 'bg-purple/10 text-purple-dark';
       case 'escalated':
-        return 'bg-red-100 text-red-800';
+        return 'bg-danger/10 text-danger-dark';
       case 'resolved':
-        return 'bg-green-100 text-green-800';
+        return 'bg-success/10 text-success-dark';
       case 'closed':
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-surface-light text-body-dark';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-surface-light text-body-dark';
     }
   };
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
       case 'high':
-        return 'text-red-600 bg-red-50';
+        return 'text-danger bg-danger/10';
       case 'medium':
-        return 'text-amber-600 bg-amber-50';
+        return 'text-warning-dark bg-warning/10';
       case 'low':
-        return 'text-green-600 bg-green-50';
+        return 'text-success bg-success/10';
       default:
-        return 'text-gray-600 bg-gray-50';
+        return 'text-body-dark bg-surface-light';
     }
   };
 
@@ -177,9 +177,9 @@ export function TicketTable({ tickets, showUser = false, emptyMessage = 'No tick
 
   if (tickets.length === 0) {
     return (
-      <div className="rounded-xl bg-white p-12 text-center shadow-sm ring-1 ring-gray-100">
+      <div className="card p-12 text-center">
         <svg
-          className="mx-auto h-12 w-12 text-gray-400"
+          className="mx-auto h-12 w-12 text-text-gray"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -191,50 +191,50 @@ export function TicketTable({ tickets, showUser = false, emptyMessage = 'No tick
             d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
           />
         </svg>
-        <p className="mt-4 text-gray-500">{emptyMessage}</p>
+        <p className="mt-4 text-text-muted">{emptyMessage}</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+    <div className="overflow-hidden rounded-lg bg-white shadow-card border border-border-light">
+      <table className="min-w-full divide-y divide-border-light">
+        <thead className="bg-surface-light">
           <tr>
-            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">
               Title
             </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">
               Category
             </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">
               Status
             </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">
               Severity
             </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">
               Duration
             </th>
-            <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">
               Action
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100 bg-white">
+        <tbody className="divide-y divide-border-light bg-white">
           {tickets.map((ticket) => (
             <tr
               key={ticket.id}
-              className="group transition-colors hover:bg-gray-50"
+              className="group transition-colors hover:bg-surface-light"
             >
               <td className="px-6 py-4">
                 <Link href={getTicketUrl(ticket.id)} className="block">
                   <div className="flex items-center">
                     <div className="max-w-sm">
-                      <div className="font-medium text-gray-900 truncate group-hover:text-primary-600">
+                      <div className="font-medium text-body-dark truncate group-hover:text-primary">
                         {ticket.subject}
                       </div>
-                      <div className="mt-1 text-xs text-gray-500">
+                      <div className="mt-1 text-xs text-text-muted">
                         #{ticket.ticketNumber} &middot; {formatDate(ticket.createdAt)}
                       </div>
                     </div>
@@ -242,8 +242,8 @@ export function TicketTable({ tickets, showUser = false, emptyMessage = 'No tick
                 </Link>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <span className="text-gray-400">{getCategoryIcon(ticket.category)}</span>
+                <div className="flex items-center space-x-2 text-sm text-body-dark">
+                  <span className="text-text-gray">{getCategoryIcon(ticket.category)}</span>
                   <span>{formatCategory(ticket.category)}</span>
                 </div>
               </td>
@@ -272,23 +272,23 @@ export function TicketTable({ tickets, showUser = false, emptyMessage = 'No tick
                   if (durationInfo.type === 'resolved') {
                     return (
                       <div className="flex items-center space-x-1.5">
-                        <svg className="h-4 w-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="h-4 w-4 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        <span className="text-sm text-green-600">{durationInfo.duration}</span>
+                        <span className="text-sm text-success">{durationInfo.duration}</span>
                       </div>
                     );
                   } else if (durationInfo.type === 'escalated') {
                     return (
                       <div className="flex flex-col">
                         <div className="flex items-center space-x-1.5">
-                          <svg className="h-4 w-4 text-red-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="h-4 w-4 text-danger animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                           </svg>
-                          <span className="text-sm text-red-600">{durationInfo.duration}</span>
+                          <span className="text-sm text-danger">{durationInfo.duration}</span>
                         </div>
                         {durationInfo.escalatedDuration && (
-                          <span className="text-xs text-red-400 mt-0.5">
+                          <span className="text-xs text-danger-light mt-0.5">
                             Waiting {durationInfo.escalatedDuration}
                           </span>
                         )}
@@ -297,10 +297,10 @@ export function TicketTable({ tickets, showUser = false, emptyMessage = 'No tick
                   } else {
                     return (
                       <div className="flex items-center space-x-1.5">
-                        <svg className="h-4 w-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="h-4 w-4 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span className="text-sm text-amber-600">{durationInfo.duration}</span>
+                        <span className="text-sm text-warning-dark">{durationInfo.duration}</span>
                       </div>
                     );
                   }
@@ -309,7 +309,7 @@ export function TicketTable({ tickets, showUser = false, emptyMessage = 'No tick
               <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                 <Link
                   href={getTicketUrl(ticket.id)}
-                  className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-800 hover:bg-primary-50 rounded-lg transition-colors"
+                  className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary-light hover:text-primary hover:bg-primary-50 rounded transition-colors"
                 >
                   View
                   <svg className="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

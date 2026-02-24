@@ -31,6 +31,12 @@ export interface AgentChatResponse {
   response: AgentResponse;
   conversationId: string;
   ticketUpdated: boolean;
+  /** The saved agent message - use this for immediate display to avoid read-after-write issues */
+  agentMessage: {
+    id: string;
+    content: string;
+    createdAt: string;
+  };
 }
 
 /**
@@ -86,7 +92,8 @@ export class AgentService {
     await this.saveMessage(ticket.id, 'user', message, userId);
 
     // 4. Save agent response to conversation history
-    const conversationId = await this.saveAgentMessage(ticket.id, agentResponse, userId);
+    const savedAgentMessage = await this.saveAgentMessage(ticket.id, agentResponse, userId);
+    const conversationId = savedAgentMessage.id;
 
     // 5. Handle immediate escalation if needed (hardware/security)
     if (agentResponse.decision === 'escalate' && agentResponse.escalation_summary) {
@@ -175,7 +182,7 @@ export class AgentService {
       previousStepsAttempted: this.extractPreviousSteps(history),
     };
 
-    // 5. Convert history to LLM format
+    // 5. Convert history to LLM format and compute turn count
     const llmHistory: ConversationMessage[] = history.map((msg) => ({
       role: msg.role as 'user' | 'agent' | 'system',
       content: msg.content,
@@ -187,11 +194,14 @@ export class AgentService {
       content: request.message,
     });
 
+    // Compute user turn count for conversation pacing
+    const userTurnCount = history.filter(m => m.role === 'user').length + 1;
+
     // 6. Get agent response from LLM
-    const agentResponse = await llmService.getAgentResponse(context, llmHistory);
+    const agentResponse = await llmService.getAgentResponse(context, llmHistory, userTurnCount);
 
     // 7. Save agent response to history
-    const agentMessageId = await this.saveAgentMessage(
+    const savedAgentMessage = await this.saveAgentMessage(
       request.ticketId,
       agentResponse,
       userId
@@ -221,8 +231,9 @@ export class AgentService {
 
     return {
       response: agentResponse,
-      conversationId: agentMessageId,
+      conversationId: savedAgentMessage.id,
       ticketUpdated,
+      agentMessage: savedAgentMessage,
     };
   }
 
@@ -288,12 +299,13 @@ export class AgentService {
 
   /**
    * Save agent response to conversation history
+   * Returns the saved message details for immediate frontend display
    */
   private async saveAgentMessage(
     ticketId: string,
     response: AgentResponse,
     userId: string
-  ): Promise<string> {
+  ): Promise<{ id: string; content: string; createdAt: string }> {
     // Build readable content from response
     const content = this.buildAgentMessageContent(response);
 
@@ -305,7 +317,7 @@ export class AgentService {
         content,
         agent_response: response,
       })
-      .select('id')
+      .select('id, created_at')
       .single();
 
     if (error) {
@@ -313,7 +325,11 @@ export class AgentService {
       throw new Error('Failed to save agent response');
     }
 
-    return data.id;
+    return {
+      id: data.id,
+      content,
+      createdAt: data.created_at,
+    };
   }
 
   /**
@@ -346,23 +362,35 @@ export class AgentService {
       );
     }
 
-    // Add approval request info
-    if (response.decision === 'request_approval' && response.proposed_privileged_action) {
-      const action = response.proposed_privileged_action;
-      if (action.action === 'password_reset') {
-        parts.push('\n🔐 **Password Reset Request Submitted**');
-        parts.push(`\nI've submitted a password reset request for your account (${action.target}).`);
-        parts.push('An IT Administrator will review and approve this request shortly.');
-        parts.push('\nOnce approved, I\'ll provide you with a temporary password and guide you through the login process.');
-        parts.push('\n⏳ Please wait for the approval notification...');
-      } else if (action.action === 'account_enable') {
-        parts.push('\n🔓 **Account Enable Request Submitted**');
-        parts.push(`\nI've submitted a request to enable the account (${action.target}).`);
-        parts.push('An IT Administrator will review and approve this request shortly.');
-      } else if (action.action === 'account_disable') {
-        parts.push('\n🔒 **Account Disable Request Submitted**');
-        parts.push(`\nI've submitted a request to disable the account (${action.target}).`);
-        parts.push('An IT Administrator will review and approve this request shortly.');
+    // Add approval request info - ALWAYS show message when decision is request_approval
+    if (response.decision === 'request_approval') {
+      if (response.proposed_privileged_action) {
+        const action = response.proposed_privileged_action;
+        if (action.action === 'password_reset') {
+          parts.push('\n🔐 **Password Reset Request Submitted**');
+          parts.push(`\nI've submitted a password reset request for your account (${action.target || 'your email'}).`);
+          parts.push('An IT Administrator will review and approve this request shortly.');
+          parts.push('\nOnce approved, you\'ll receive a temporary password right here in this chat.');
+          parts.push('\n⏳ Please keep this conversation open or check back soon...');
+        } else if (action.action === 'account_enable') {
+          parts.push('\n🔓 **Account Enable Request Submitted**');
+          parts.push(`\nI've submitted a request to enable the account (${action.target}).`);
+          parts.push('An IT Administrator will review and approve this request shortly.');
+        } else if (action.action === 'account_disable') {
+          parts.push('\n🔒 **Account Disable Request Submitted**');
+          parts.push(`\nI've submitted a request to disable the account (${action.target}).`);
+          parts.push('An IT Administrator will review and approve this request shortly.');
+        } else {
+          // Unknown action type - still show a message
+          parts.push('\n✅ **Request Submitted**');
+          parts.push('\nYour request has been submitted for IT Administrator approval.');
+          parts.push('\n⏳ Please wait for the approval notification...');
+        }
+      } else {
+        // No privileged action specified - still show a message for request_approval decision
+        parts.push('\n✅ **Request Submitted**');
+        parts.push('\nYour request has been submitted for IT Administrator review.');
+        parts.push('\n⏳ Please wait for a response...');
       }
     }
 
@@ -455,15 +483,26 @@ export class AgentService {
     const userName = userData?.full_name || 'Unknown User';
     const userEmail = userData?.email || 'unknown';
 
-    // Determine the target email - use LLM response, but fallback to requester's email if placeholder
-    let targetEmail = action.target;
-    if (!targetEmail ||
-        targetEmail.includes('example.com') ||
-        targetEmail === 'user@example.com' ||
-        !targetEmail.includes('@')) {
-      // Use the requester's email as fallback
-      console.log(`LLM returned placeholder email "${action.target}", using requester email: ${userEmail}`);
+    // For password reset: ALWAYS use the authenticated user's email
+    // This is a self-service flow - users reset their own passwords
+    // Don't rely on LLM to extract email from conversation (it often returns placeholders)
+    let targetEmail: string;
+    if (action.action === 'password_reset') {
+      // Always use the requester's email for self-service password resets
       targetEmail = userEmail;
+      console.log(`Password reset request: using authenticated user's email: ${userEmail}`);
+    } else {
+      // For other actions, use LLM-provided target with fallback validation
+      targetEmail = action.target;
+      if (!targetEmail ||
+          targetEmail.includes('example.com') ||
+          targetEmail.includes('test.com') ||
+          targetEmail === 'user@example.com' ||
+          targetEmail === 'employee@company.com' ||
+          !targetEmail.includes('@')) {
+        console.log(`LLM returned invalid email "${action.target}", using requester email: ${userEmail}`);
+        targetEmail = userEmail;
+      }
     }
 
     // Create the approval request

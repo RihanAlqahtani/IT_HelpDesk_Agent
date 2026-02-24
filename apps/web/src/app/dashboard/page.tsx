@@ -56,8 +56,8 @@ export default function DashboardPage() {
         {/* Page header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="mt-1 text-gray-500">
+            <h1 className="text-2xl font-heading font-bold text-primary-dark">Dashboard</h1>
+            <p className="mt-1 text-text-muted">
               {isITStaff
                 ? 'Overview of all IT support activity'
                 : 'Track your support requests and get help'}
@@ -67,12 +67,12 @@ export default function DashboardPage() {
 
         {/* Error message */}
         {error && (
-          <div className="rounded-lg bg-red-50 p-4 ring-1 ring-red-100">
+          <div className="alert-danger">
             <div className="flex items-center">
-              <svg className="h-5 w-5 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-5 w-5 text-danger mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span className="text-sm text-red-700">{error}</span>
+              <span className="text-sm text-danger-dark">{error}</span>
             </div>
           </div>
         )}
@@ -81,7 +81,7 @@ export default function DashboardPage() {
         {loading ? (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-32 animate-pulse rounded-xl bg-gray-100" />
+              <div key={i} className="h-32 animate-pulse rounded-lg bg-surface-light" />
             ))}
           </div>
         ) : (
@@ -131,17 +131,17 @@ export default function DashboardPage() {
 
         {/* Quick actions for employees */}
         {!isITStaff && (
-          <div className="rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 p-6 text-white shadow-lg">
+          <div className="rounded-lg bg-gradient-to-r from-primary to-primary-dark p-6 text-white shadow-card">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold">Need help with something?</h3>
+                <h3 className="text-lg font-heading font-semibold">Need help with something?</h3>
                 <p className="mt-1 text-primary-100">
                   Create a new ticket and our AI assistant will help you resolve your issue quickly.
                 </p>
               </div>
               <Link
                 href="/tickets/new"
-                className="flex items-center space-x-2 rounded-lg bg-white px-5 py-2.5 text-sm font-medium text-primary-700 shadow-sm transition hover:bg-primary-50"
+                className="flex items-center space-x-2 rounded bg-white px-5 py-2.5 text-sm font-medium text-primary-dark shadow-sm transition hover:bg-primary-50"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -154,26 +154,26 @@ export default function DashboardPage() {
 
         {/* IT Staff - Escalated tickets alert */}
         {isITStaff && stats && stats.escalated > 0 && (
-          <div className="rounded-xl bg-red-50 p-6 ring-1 ring-red-100">
+          <div className="alert-danger p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
-                  <svg className="h-5 w-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-danger-light/20">
+                  <svg className="h-5 w-5 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                 </div>
                 <div className="ml-4">
-                  <h3 className="font-semibold text-red-900">
+                  <h3 className="font-semibold text-danger-dark">
                     {stats.escalated} Escalated {stats.escalated === 1 ? 'Ticket' : 'Tickets'}
                   </h3>
-                  <p className="text-sm text-red-700">
+                  <p className="text-sm text-danger">
                     These tickets require immediate attention from IT staff
                   </p>
                 </div>
               </div>
               <Link
                 href="/admin/tickets?status=escalated"
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
+                className="btn-danger px-4 py-2"
               >
                 View Escalated
               </Link>
@@ -184,12 +184,12 @@ export default function DashboardPage() {
         {/* Recent tickets */}
         <div>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-lg font-heading font-semibold text-body-dark">
               {isITStaff ? 'Recent Tickets' : 'Your Recent Tickets'}
             </h2>
             <Link
               href={isITStaff ? '/admin/tickets' : '/tickets'}
-              className="text-sm font-medium text-primary-600 hover:text-primary-700"
+              className="text-sm font-medium text-primary-light hover:text-primary transition-colors"
             >
               View all
             </Link>
@@ -198,7 +198,7 @@ export default function DashboardPage() {
           {loading ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-16 animate-pulse rounded-xl bg-gray-100" />
+                <div key={i} className="h-16 animate-pulse rounded-lg bg-surface-light" />
               ))}
             </div>
           ) : (
@@ -216,7 +216,7 @@ export default function DashboardPage() {
         {/* Coming Soon Features - For IT Staff */}
         {isITStaff && (
           <div className="mt-8">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">Coming Soon</h2>
+            <h2 className="mb-4 text-lg font-heading font-semibold text-body-dark">Coming Soon</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <ComingSoonCard
                 title="User Management"
@@ -263,17 +263,17 @@ function ComingSoonCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-xl bg-gray-50 p-6 ring-1 ring-gray-200">
+    <div className="relative overflow-hidden rounded-lg bg-surface-light p-6 border border-border-light">
       <div className="absolute right-2 top-2">
-        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+        <span className="badge-warning">
           Coming Soon
         </span>
       </div>
-      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-200 text-gray-500">
+      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-100 text-primary">
         {icon}
       </div>
-      <h3 className="mt-4 font-medium text-gray-900">{title}</h3>
-      <p className="mt-1 text-sm text-gray-500">{description}</p>
+      <h3 className="mt-4 font-medium text-body-dark">{title}</h3>
+      <p className="mt-1 text-sm text-text-muted">{description}</p>
     </div>
   );
 }

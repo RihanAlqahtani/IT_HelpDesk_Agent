@@ -8,7 +8,7 @@
 /**
  * System roles
  */
-export type UserRole = 'employee' | 'it_support' | 'it_admin' | 'system_service';
+export type UserRole = 'employee' | 'it_support' | 'it_admin' | 'system_service' | 'hr';
 
 /**
  * Permission capability names
@@ -27,7 +27,8 @@ export type Permission =
   | 'password.reset'
   | 'permission.modify'
   | 'onboarding.execute'
-  | 'offboarding.execute';
+  | 'offboarding.execute'
+  | 'employee.modify';
 
 /**
  * Permission metadata

@@ -29,10 +29,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   // Show loading state while checking auth
   if (!mounted || isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+      <div className="flex min-h-screen items-center justify-center bg-surface-light">
         <div className="text-center">
           <div className="spinner mx-auto mb-4 h-8 w-8"></div>
-          <p className="text-sm text-gray-500">Loading...</p>
+          <p className="text-sm text-text-muted">Loading...</p>
         </div>
       </div>
     );
@@ -44,7 +44,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface-light">
       <Sidebar />
       <div className="ml-64 min-h-screen">
         <Header />

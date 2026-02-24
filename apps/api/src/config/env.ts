@@ -56,6 +56,16 @@ const envSchema = z.object({
   AZURE_CLIENT_ID: z.string().optional(),
   AZURE_CLIENT_SECRET: z.string().optional(),
   GRAPH_API_ENDPOINT: z.string().url().default('https://graph.microsoft.com/v1.0'),
+
+  // Azure AD User / Domain Configuration
+  AZURE_USER_DOMAIN: z.string().default('3lines.com.sa'),
+  AZURE_DEFAULT_USAGE_LOCATION: z.string().default('SA'),
+  AZURE_DEFAULT_LICENSE_SKU: z.string().default('O365_BUSINESS_PREMIUM'),
+
+  // HR Onboarding Configuration
+  HR_ONBOARDING_ACCESS_CODE: z.string().min(10, 'HR onboarding access code must be at least 10 characters'),
+  HR_CREDENTIAL_SENDER_EMAIL: z.string().email().optional(),
+  HR_CREDENTIAL_SENDER_USER_ID: z.string().optional(),
 });
 
 function loadEnv() {

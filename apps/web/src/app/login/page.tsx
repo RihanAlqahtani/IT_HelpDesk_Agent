@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { authAPI, APIError } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
+import { createClient } from '@/lib/supabase';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoadingState] = useState(false);
+  const [ssoLoading, setSsoLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -62,6 +64,29 @@ export default function LoginPage() {
       }
     } finally {
       setLoadingState(false);
+    }
+  };
+
+  const handleMicrosoftSignIn = async () => {
+    setSsoLoading(true);
+    setError('');
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'azure',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          scopes: 'email profile openid',
+        },
+      });
+      if (error) {
+        setError('Failed to initiate Microsoft sign-in. Please try again.');
+        setSsoLoading(false);
+      }
+      // If successful, browser will redirect — no need to reset loading
+    } catch (err) {
+      setError('Failed to connect to Microsoft. Please try again.');
+      setSsoLoading(false);
     }
   };
 
@@ -147,6 +172,41 @@ export default function LoginPage() {
               </div>
             )}
 
+            {/* Microsoft SSO Button */}
+            <button
+              type="button"
+              onClick={handleMicrosoftSignIn}
+              disabled={ssoLoading || loading}
+              className="w-full flex items-center justify-center gap-3 rounded-lg border border-border-light bg-white px-4 py-3 text-sm font-medium text-body-dark shadow-sm transition-all hover:bg-surface-light hover:shadow focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {ssoLoading ? (
+                <>
+                  <span className="spinner mr-2"></span>
+                  Connecting to Microsoft...
+                </>
+              ) : (
+                <>
+                  <svg width="20" height="20" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+                    <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+                    <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+                    <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+                  </svg>
+                  Sign in with Microsoft
+                </>
+              )}
+            </button>
+
+            {/* Divider */}
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border-light" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="bg-white px-4 text-text-muted">or sign in with email</span>
+              </div>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-body-dark mb-1.5">
@@ -197,7 +257,7 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || ssoLoading}
                 className="btn-primary w-full py-3 text-base font-medium"
               >
                 {loading ? (
@@ -215,19 +275,6 @@ export default function LoginPage() {
               <p className="text-center text-sm text-text-gray">
                 Need help? Contact your IT administrator
               </p>
-            </div>
-          </div>
-
-          {/* Demo credentials hint */}
-          <div className="mt-6 p-4 bg-info/10 rounded-lg border border-info/20">
-            <div className="flex items-start">
-              <svg className="h-5 w-5 text-info mt-0.5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div className="text-sm text-info-dark">
-                <p className="font-medium">Demo Environment</p>
-                <p className="mt-1 text-info">Use your company credentials to sign in, or contact IT for access.</p>
-              </div>
             </div>
           </div>
         </div>

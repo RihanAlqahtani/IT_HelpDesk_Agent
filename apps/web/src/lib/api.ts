@@ -97,6 +97,20 @@ export const authAPI = {
       body: JSON.stringify({ refreshToken }),
     });
   },
+
+  getSSOProfile: async (accessToken: string) => {
+    return apiRequest<{
+      user: {
+        id: string;
+        email: string;
+        fullName: string;
+        role: string;
+        permissions: string[];
+      };
+    }>('/api/auth/sso-profile', {
+      method: 'POST',
+    }, accessToken);
+  },
 };
 
 // =============================================================================

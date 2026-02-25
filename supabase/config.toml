@@ -31,7 +31,7 @@ file_size_limit = "50MiB"
 [auth]
 enabled = true
 site_url = "http://localhost:3000"
-additional_redirect_urls = ["https://localhost:3000"]
+additional_redirect_urls = ["https://localhost:3000", "http://localhost:3000/auth/callback", "https://helpdesk.ai3lines.com/auth/callback"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
@@ -47,7 +47,10 @@ enable_signup = false
 enable_confirmations = false
 
 [auth.external.azure]
-enabled = false
+enabled = true
+client_id = "env(SUPABASE_AUTH_AZURE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_AZURE_SECRET)"
+url = "https://login.microsoftonline.com/dec17d0d-598d-4a20-9cbb-daac54309254/v2.0"
 
 [analytics]
 enabled = false

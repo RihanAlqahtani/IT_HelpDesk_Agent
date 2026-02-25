@@ -313,4 +313,171 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+/**
+ * POST /api/auth/sso-profile
+ * Get or create user profile for SSO login.
+ * Called by the /auth/callback page after Supabase completes the OAuth flow.
+ * If the user has no it_users profile (first SSO login), one is auto-created
+ * with the 'employee' role.
+ */
+router.post('/sso-profile', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Unauthorized', message: 'Missing authorization header' });
+      return;
+    }
+    const token = authHeader.slice(7);
+
+    // Verify token with Supabase
+    const {
+      data: { user: authUser },
+      error: authError,
+    } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !authUser) {
+      res.status(401).json({ error: 'Unauthorized', message: 'Invalid token' });
+      return;
+    }
+
+    // Try to fetch existing profile
+    let { data: profile, error: profileError } = await supabaseAdmin
+      .from('it_users')
+      .select('id, email, full_name, department, is_active, it_roles(name)')
+      .eq('id', authUser.id)
+      .single();
+
+    // If no profile exists, auto-create one (first SSO login)
+    if (profileError?.code === 'PGRST116' || !profile) {
+      const { data: roleData, error: roleError } = await supabaseAdmin
+        .from('it_roles')
+        .select('id')
+        .eq('name', 'employee')
+        .single();
+
+      if (roleError || !roleData) {
+        res.status(500).json({ error: 'Failed to assign default role' });
+        return;
+      }
+
+      // Extract name from Azure AD user metadata
+      const fullName =
+        authUser.user_metadata?.full_name ||
+        authUser.user_metadata?.name ||
+        authUser.user_metadata?.preferred_username?.split('@')[0] ||
+        authUser.email?.split('@')[0] ||
+        'Unknown User';
+
+      const { error: insertError } = await supabaseAdmin.from('it_users').insert({
+        id: authUser.id,
+        email: authUser.email!,
+        full_name: fullName,
+        department: null,
+        role_id: roleData.id,
+        is_active: true,
+      });
+
+      if (insertError) {
+        // Handle race condition: profile may have been created by a concurrent request
+        if (insertError.code === '23505') {
+          const { data: existingProfile } = await supabaseAdmin
+            .from('it_users')
+            .select('id, email, full_name, department, is_active, it_roles(name)')
+            .eq('id', authUser.id)
+            .single();
+          if (existingProfile) {
+            profile = existingProfile;
+          } else {
+            res.status(500).json({ error: 'Failed to create user profile' });
+            return;
+          }
+        } else {
+          console.error('Failed to auto-create SSO profile:', insertError);
+          res.status(500).json({ error: 'Failed to create user profile' });
+          return;
+        }
+      } else {
+        // Fetch the newly created profile
+        const { data: newProfile, error: fetchError } = await supabaseAdmin
+          .from('it_users')
+          .select('id, email, full_name, department, is_active, it_roles(name)')
+          .eq('id', authUser.id)
+          .single();
+
+        if (fetchError || !newProfile) {
+          res.status(500).json({ error: 'Failed to fetch new profile' });
+          return;
+        }
+
+        profile = newProfile;
+
+        await logAudit({
+          userId: authUser.id,
+          action: 'SSO_FIRST_LOGIN',
+          resourceType: 'user',
+          resourceId: authUser.id,
+          details: { provider: 'azure', email: authUser.email },
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+        });
+      }
+    }
+
+    if (!profile.is_active) {
+      res.status(403).json({ error: 'Account disabled', message: 'Your account has been disabled' });
+      return;
+    }
+
+    // Update last login
+    await supabaseAdmin
+      .from('it_users')
+      .update({ last_login_at: new Date().toISOString() })
+      .eq('id', authUser.id);
+
+    // Extract role name
+    const rolesData = profile.it_roles as unknown as { name: string } | { name: string }[] | null;
+    const roleName = Array.isArray(rolesData) ? rolesData[0]?.name : rolesData?.name;
+
+    // Fetch permissions
+    const { data: roleData } = await supabaseAdmin
+      .from('it_roles')
+      .select('id')
+      .eq('name', roleName)
+      .single();
+
+    const { data: permissions } = await supabaseAdmin
+      .from('it_role_permissions')
+      .select('it_permissions(name)')
+      .eq('role_id', roleData?.id || '');
+
+    const permissionNames = (permissions || []).map((p: any) => {
+      const permData = p.it_permissions as unknown as { name: string } | { name: string }[] | null;
+      return Array.isArray(permData) ? permData[0]?.name : permData?.name;
+    }).filter((name: any): name is string => !!name);
+
+    await logAudit({
+      userId: authUser.id,
+      action: 'SSO_LOGIN_SUCCESS',
+      resourceType: 'authentication',
+      resourceId: authUser.id,
+      details: { provider: 'azure' },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
+    res.json({
+      user: {
+        id: profile.id,
+        email: profile.email,
+        fullName: profile.full_name,
+        role: roleName,
+        permissions: permissionNames,
+      },
+    });
+  } catch (error) {
+    console.error('SSO profile error:', error);
+    res.status(500).json({ error: 'SSO authentication failed' });
+  }
+});
+
 export default router;

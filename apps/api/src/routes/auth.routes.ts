@@ -314,11 +314,26 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
+ * Email-to-role mapping for SSO auto-provisioning.
+ * Emails are matched case-insensitively.
+ */
+const SSO_EMAIL_ROLE_MAP: Record<string, string> = {
+  'arwa@3lines.com.sa': 'it_admin',
+  'kh.binsalman1@3lines.com.sa': 'it_admin',
+  'abdullah.kh@3lines.com.sa': 'it_admin',
+  'mashael.alharb@3lines.com.sa': 'hr',
+};
+
+function getRoleForEmail(email: string): string {
+  return SSO_EMAIL_ROLE_MAP[email.toLowerCase()] || 'employee';
+}
+
+/**
  * POST /api/auth/sso-profile
  * Get or create user profile for SSO login.
  * Called by the /auth/callback page after Supabase completes the OAuth flow.
  * If the user has no it_users profile (first SSO login), one is auto-created
- * with the 'employee' role.
+ * with a role determined by email (see SSO_EMAIL_ROLE_MAP).
  */
 router.post('/sso-profile', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -349,10 +364,11 @@ router.post('/sso-profile', async (req: Request, res: Response): Promise<void> =
 
     // If no profile exists, auto-create one (first SSO login)
     if (profileError?.code === 'PGRST116' || !profile) {
+      const assignedRole = getRoleForEmail(authUser.email || '');
       const { data: roleData, error: roleError } = await supabaseAdmin
         .from('it_roles')
         .select('id')
-        .eq('name', 'employee')
+        .eq('name', assignedRole)
         .single();
 
       if (roleError || !roleData) {

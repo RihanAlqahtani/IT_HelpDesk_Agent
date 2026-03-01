@@ -107,7 +107,7 @@ export default function LoginPage() {
             </div>
             <div>
               <h1 className="text-2xl font-heading font-bold text-white">3Lines IT Helpdesk</h1>
-              <p className="text-primary-100 text-sm">Support Portal</p>
+              <p className="text-white/90 text-sm">Support Portal</p>
             </div>
           </div>
         </div>
@@ -116,26 +116,26 @@ export default function LoginPage() {
           <h2 className="text-4xl font-heading font-bold text-white leading-tight">
             Get IT support<br />in minutes, not hours.
           </h2>
-          <p className="text-primary-100 text-lg max-w-md">
+          <p className="text-white/90 text-lg max-w-md">
             Our AI-powered assistant helps you troubleshoot common issues instantly. For complex problems, we'll connect you with our expert IT team.
           </p>
           <div className="grid grid-cols-3 gap-4 pt-4">
             <div className="bg-white/10 backdrop-blur rounded-lg p-4">
               <div className="text-3xl font-heading font-bold text-white">24/7</div>
-              <div className="text-primary-100 text-sm">AI Support</div>
+              <div className="text-white/90 text-sm">AI Support</div>
             </div>
             <div className="bg-white/10 backdrop-blur rounded-lg p-4">
               <div className="text-3xl font-heading font-bold text-white">&lt;5m</div>
-              <div className="text-primary-100 text-sm">Avg Response</div>
+              <div className="text-white/90 text-sm">Avg Response</div>
             </div>
             <div className="bg-white/10 backdrop-blur rounded-lg p-4">
               <div className="text-3xl font-heading font-bold text-white">85%</div>
-              <div className="text-primary-100 text-sm">Auto-Resolved</div>
+              <div className="text-white/90 text-sm">Auto-Resolved</div>
             </div>
           </div>
         </div>
 
-        <div className="text-primary-200 text-sm">
+        <div className="text-white/80 text-sm">
           &copy; 2025 3Lines IT Helpdesk. All rights reserved.
         </div>
       </div>
